@@ -5,77 +5,71 @@ import scipy.io as sio
 from dolfin_adjoint import *
 import moola
 np.random.seed(1)
-#set_log_level(ERROR)
 
 ### first we set up the system:
 R_star = 141.       # characteristic length [um]
 M_star = 1.0e-3     # charcateristic M [mmHg/um**2]
 
-R_ves = 6/R_star        # vessel radius
+R_ves = 6/R_star                # vessel radius
 p_ves = 80./(M_star*R_star**2)  # pO2 at vessel wall
+M = 1
 #sigma = 5e-4
 sigma = 1/(M_star*R_star**2)    # noise
 
 mesh = Mesh("rectangular_mesh.xml")
 V = FunctionSpace(mesh, 'CG', 1)
-W = FunctionSpace(mesh, 'DG', 0)
+W = FunctionSpace(mesh, 'CG', 1)
 
-def boundary1(x, on_boundary):
+def boundary(x, on_boundary):
+    eps = 0.1
     r = np.sqrt(x[0]**2 + x[1]**2)
-    b = ((r < R_ves+DOLFIN_EPS) and on_boundary)
+    b = ((r < R_ves+eps) and on_boundary)
     return b
 
-bc1 = DirichletBC(V, p_ves, boundary1)
-bcs = bc1
+bcs = DirichletBC(V, p_ves, boundary)
 
 ### Solve the noiseless system to find the true p
-C = 1
-p = Function(V)
-M = Constant(C)
+p = TrialFunction(V)
 v = TestFunction(V)
-form = (inner(nabla_grad(p), nabla_grad(v)) + M*v )*dx
-solve(form==0, p, bcs)
+M = Constant(M)
+a = dot(grad(p), grad(v))*dx
+L = -M*v*dx
+p = Function(V)
+solve(a == L, p, bcs)
 p_solution = p.copy(deepcopy=True)
 
 ### Create noisy system
-noise = sigma*np.random.randn(np.size(np.array(p.vector())))
+N = V.dim()
+noise = sigma*np.random.randn(N)
 p_noisy = p.copy(deepcopy=True)
-p_noisy.vector()[:] = np.array(p.vector()) + noise
+p_noisy.vector()[:] += noise
 
 e1 = errornorm(p,p_noisy)
 
 # Solve forward problem (needed for moola)
-p = Function(V, name='State')
+p = TrialFunction(V)
 M = Function(W, name='Control')
-form = (inner(nabla_grad(p), nabla_grad(v)) + M*v )*dx
-solve(form==0, p, bcs)
+a = dot(grad(p), grad(v))*dx
+L = -M*v*dx
+p = Function(V, name='State')
+solve(a == L, p, bcs)
 
 ### Set up the functional:
-l = 1
-eps = 1e-8
+alpha = 1e-8
 control = Control(M)
-def func(p, M, l, eps):
-    return (0.5*inner(p_noisy-p,p_noisy-p) + l*sqrt(inner(nabla_grad(M), nabla_grad(M))+eps))*dx
-
-#J = Functional(func(p,M,l,eps))
-J = assemble(func(p,M,l,eps))
+functional = (0.5*inner(p_noisy-p,p_noisy-p) + (alpha/2)*inner(grad(M), grad(M)))*dx
+J = assemble(functional)
 rf = ReducedFunctional(J, control)
-problem = MoolaOptimizationProblem(rf)
-M_moola = moola.DolfinPrimalVector(M, inner_product="L2")
-solver = moola.BFGS(problem, M_moola, options={'jtol': 0,
-                                               'rjtol': 1e-12,
-                                               'gtol': 1e-9,
-                                               'Hinit': "default",
-                                               'maxiter': 100,
-                                               'mem_lim': 10})
+
 ### Solve
-sol = solver.solve()
+M_opt = minimize(rf, options={"disp":True})
 
 ### Check solution
-M_opt = sol['control'].data
+p_opt = TrialFunction(V)
+a = dot(grad(p_opt), grad(v))*dx
+L = -M_opt*v*dx
 p_opt = Function(V)
-form_opt = (inner(nabla_grad(p_opt), nabla_grad(v)) + M_opt*v )*dx
-solve(form_opt==0, p_opt,bcs)
+solve(a == L, p_opt, bcs)
 
 e2 = errornorm(p_opt, p_solution)
 

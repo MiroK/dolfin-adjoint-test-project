@@ -16,7 +16,7 @@ def rectangular_mesh():
     
     domain = grid - vessel
     
-    resolution = 300
+    resolution = 30
     mesh = generate_mesh(domain, resolution)
     
     return mesh
@@ -27,6 +27,5 @@ if __name__ == "__main__":
     
     mesh_file = File("rectangular_mesh.xml")
     mesh_file << mesh
-    #plot(mesh)
-    #plt.show()
-
+    plot(mesh)
+    plt.show()
