@@ -6,88 +6,146 @@ from dolfin_adjoint import *
 import moola
 np.random.seed(1)
 
-### first we set up the system:
-R_star = 141.       # characteristic length [um]
-M_star = 1.0e-3     # charcateristic M [mmHg/um**2]
+def read_pO2_from_file(filename):
 
-R_ves = 6/R_star                # vessel radius
-p_ves = 80./(M_star*R_star**2)  # pO2 at vessel wall
-M = 1
-#sigma = 5e-4
-sigma = 1/(M_star*R_star**2)    # noise
+    ### import data
+    data = np.load(filename)
+    Nx = len(data['x'])
+    Ny = len(data['y'])
+    N = int(Nx*Ny)
+    p_exact_data = data['pO2']
+    p_noisy_data = data['pO2_noisy']
+    
+    mesh = RectangleMesh(Point(-1, -1), Point(1, 1), Nx-1, Ny-1)
+    V = FunctionSpace(mesh, 'CG', 1)
+    W = FunctionSpace(mesh, 'CG', 1)
 
-mesh = Mesh("rectangular_mesh.xml")
-V = FunctionSpace(mesh, 'CG', 1)
-W = FunctionSpace(mesh, 'CG', 1)
+    d2v = dof_to_vertex_map(V)
+    
+    p_exact_vector = np.reshape(p_exact_data, (1, N))
+    p = Function(V)
+    p.vector()[:] = p_exact_vector[0][d2v]
+    
+    p_noisy_vector = np.reshape(p_noisy_data, (1, N))
+    p_noisy = Function(V)
+    p_noisy.vector()[:] = p_noisy_vector[0][d2v]
 
-def boundary(x, on_boundary):
-    eps = 0.1
-    r = np.sqrt(x[0]**2 + x[1]**2)
-    b = ((r < R_ves+eps) and on_boundary)
-    return b
+    ### add hole
+    mesh = Mesh("rectangular_mesh.xml")
+    
+    R_ves = data['R_ves']
+    p_ves = data['p_ves']
+    
+    # interpolate
+    V = FunctionSpace(mesh, 'CG', 1)
+    W = FunctionSpace(mesh, 'CG', 1)
+    p = interpolate(p, V)
+    p_noisy = interpolate(p_noisy, V)
+    
+    def boundary(x, on_boundary):
+        eps = 0.1
+        r = np.sqrt(x[0]**2 + x[1]**2)
+        b = ((r < R_ves+eps) and on_boundary)
+        return b
 
-bcs = DirichletBC(V, p_ves, boundary)
+    bc = DirichletBC(V, p_ves, boundary)
+    
+    return p, p_noisy, V, W, bc 
+    
+def create_synthetic_pO2_data():
 
-### Solve the noiseless system to find the true p
-p = TrialFunction(V)
-v = TestFunction(V)
-M = Constant(M)
-a = inner(grad(p), grad(v))*dx
-L = -M*v*dx
-p = Function(V)
-solve(a == L, p, bcs)
-p_solution = p.copy(deepcopy=True)
+    R_star = 141.       # characteristic length [um]
+    M_star = 1.0e-3     # charcateristic M [mmHg/um**2]
 
-### Create noisy system
-L = -M*v*dx
-p = Function(V)
-solve(a == L, p, bcs)
-p_solution = p.copy(deepcopy=True)
+    R_ves = 6/R_star                # vessel radius
+    p_ves = 80./(M_star*R_star**2)  # pO2 at vessel wall
+    M = 1
+    #sigma = 5e-4
+    sigma = 1/(M_star*R_star**2)    # noise
 
-### Create noisy system
-N = V.dim()
-noise = sigma*np.random.randn(N)
-p_noisy = p.copy(deepcopy=True)
-p_noisy.vector()[:] += noise
+    mesh = Mesh("rectangular_mesh.xml")
+    V = FunctionSpace(mesh, 'CG', 1)
+    W = FunctionSpace(mesh, 'CG', 1)
 
-e1 = errornorm(p,p_noisy)
+    def boundary(x, on_boundary):
+        eps = 0.1
+        r = np.sqrt(x[0]**2 + x[1]**2)
+        b = ((r < R_ves+eps) and on_boundary)
+        return b
 
-# Solve forward problem (needed for moola)
-p = TrialFunction(V)
-M = Function(W, name='Control')
-a = inner(grad(p), grad(v))*dx
-L = -M*v*dx
-p = Function(V, name='State')
-solve(a == L, p, bcs)
+    bc = DirichletBC(V, p_ves, boundary)
 
-### Set up the functional:
-alpha = 1e-8
-control = Control(M)
-functional = (0.5*inner(p_noisy-p,p_noisy-p) + (alpha/2)*inner(grad(M), grad(M)))*dx
-J = assemble(functional)
-rf = ReducedFunctional(J, control)
+    ### Solve the noiseless system to find the true p
+    p = TrialFunction(V)
+    v = TestFunction(V)
+    M = Constant(M)
+    a = inner(grad(p), grad(v))*dx
+    L = -M*v*dx
+    p = Function(V)
+    solve(a == L, p, bc)
 
-### Solve
-M_opt = minimize(rf, options={"disp":True})
+    ### Create noisy system
+    N = V.dim()
+    noise = sigma*np.random.randn(N)
+    p_noisy = p.copy(deepcopy=True)
+    p_noisy.vector()[:] += noise
 
-### Check solution
-p_opt = TrialFunction(V)
-a = inner(grad(p_opt), grad(v))*dx
-L = -M_opt*v*dx
-p_opt = Function(V)
-solve(a == L, p_opt, bcs)
+    return p, p_noisy, V, W, bc
 
-e2 = errornorm(p_opt, p_solution)
+def estimate_M(p_data, V, W, bc, alpha):
 
-print("Error in noisy signal: ", e1)
-print("Error in restored signal: ", e2)
+    # Solve forward problem (needed for moola)
+    p = TrialFunction(V)
+    v = TestFunction(V)
+    M = Function(W, name='Control')
+    a = inner(grad(p), grad(v))*dx
+    L = -M*v*dx
+    p = Function(V, name='State')
+    solve(a == L, p, bc)
 
-### Save solutions
-file1 = File("results/p_noisy.pvd")
-file1 << p_noisy
-file2 = File("results/p_exact.pvd")
-file2 << p_solution
-file3 = File("results/p_optimal.pvd")
-file3 << p_opt
-file4 = File("results/M_optimal.pvd")
-file4 << M_opt
+    ### Set up the functional:
+    control = Control(M)
+    functional = (0.5*inner(p_data-p,p_data-p) + (alpha/2)*inner(grad(M), grad(M)))*dx
+    J = assemble(functional)
+    rf = ReducedFunctional(J, control)
+
+    ### Solve
+    M_opt = minimize(rf, options={"disp":True})
+
+    ### Check solution
+    p_opt = TrialFunction(V)
+    a = inner(grad(p_opt), grad(v))*dx
+    L = -M_opt*v*dx
+    p_opt = Function(V)
+    solve(a == L, p_opt, bc)
+
+    return p_opt, M_opt
+
+if __name__ == "__main__":
+
+    #alpha = 1e-8
+    alpha = 1e-3
+
+    #filename = 'pO2_data_low_sigma.npz'
+    filename = 'pO2_data_high_sigma.npz'
+    #filename = 'pO2_data_high_d.npz'
+    p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
+    
+    #p_exact, p_noisy, V, W, bc = create_synthetic_pO2_data()
+    
+    p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
+    
+    e1 = errornorm(p_exact, p_noisy)
+    e2 = errornorm(p_exact, p_opt)
+    print("Error in noisy signal: ", e1)
+    print("Error in restored signal: ", e2)
+
+    ### Save solutions
+    file1 = File("results/p_noisy.pvd")
+    file1 << p_noisy
+    file2 = File("results/p_exact.pvd")
+    file2 << p_exact
+    file3 = File("results/p_optimal.pvd")
+    file3 << p_opt
+    file4 = File("results/M_optimal.pvd")
+    file4 << M_opt

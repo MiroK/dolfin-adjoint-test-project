@@ -42,17 +42,19 @@ if __name__ == "__main__":
 
     #mesh = Mesh("circular_mesh.xml")
     mesh = Mesh("rectangular_mesh.xml")
-    sigma = 5e-4
+    #sigma = 5e-4
+    sigma = 1/(1e-3*141**2)
     pO2, pO2_noisy, pO2art, Rart = synthetic_pO2_data(mesh, sigma)
     
-    d = 0.007
+    #d = 0.007
+    d = 1/141.
     x = np.arange(-1, 1.0001, d)
     y = np.arange(-1, 1.0001, d)
     pO2, r = fenics2nparray(pO2, pO2art, Rart, x, y, [0,0])
     pO2_noisy, r = fenics2nparray(pO2_noisy, pO2art, Rart, x, y, [0,0])
-    np.savez('pO2_data', \
+    np.savez('pO2_data_high_d', \
             pO2=pO2, pO2_noisy=pO2_noisy, 
-            r=r, x=x, y=y, d=d)
+            r=r, x=x, y=y, d=d, p_ves=pO2art, R_ves=Rart)
 #    file1 = File("pO2.pvd")
 #    file1 << pO2
 #    file2 = File("pO2_noisy.pvd")
