@@ -32,7 +32,13 @@ bcs = DirichletBC(V, p_ves, boundary)
 p = TrialFunction(V)
 v = TestFunction(V)
 M = Constant(M)
-a = dot(grad(p), grad(v))*dx
+a = inner(grad(p), grad(v))*dx
+L = -M*v*dx
+p = Function(V)
+solve(a == L, p, bcs)
+p_solution = p.copy(deepcopy=True)
+
+### Create noisy system
 L = -M*v*dx
 p = Function(V)
 solve(a == L, p, bcs)
@@ -49,7 +55,7 @@ e1 = errornorm(p,p_noisy)
 # Solve forward problem (needed for moola)
 p = TrialFunction(V)
 M = Function(W, name='Control')
-a = dot(grad(p), grad(v))*dx
+a = inner(grad(p), grad(v))*dx
 L = -M*v*dx
 p = Function(V, name='State')
 solve(a == L, p, bcs)
@@ -66,7 +72,7 @@ M_opt = minimize(rf, options={"disp":True})
 
 ### Check solution
 p_opt = TrialFunction(V)
-a = dot(grad(p_opt), grad(v))*dx
+a = inner(grad(p_opt), grad(v))*dx
 L = -M_opt*v*dx
 p_opt = Function(V)
 solve(a == L, p_opt, bcs)
