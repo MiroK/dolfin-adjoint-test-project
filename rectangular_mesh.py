@@ -1,8 +1,23 @@
 from fenics import *
+from dolfin import *
 from mshr import *
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.io as sio
+
+def refine_mesh(mesh):
+
+    cell_markers = MeshFunction("bool", mesh, mesh.topology().dim(), False)
+    for cell in cells(mesh):
+        point = cell.midpoint()
+        x =  point.x()
+        y =  point.y()
+        r = np.sqrt(x**2 + y**2)
+        if r < 0.05:
+            cell_markers[cell] = True
+    mesh = refine(mesh, cell_markers)
+
+    return mesh
 
 def rectangular_mesh(hole):
 
@@ -21,7 +36,10 @@ def rectangular_mesh(hole):
     
     resolution = 30
     mesh = generate_mesh(domain, resolution)
-    
+
+#    for n in range(4):
+#        mesh = refine_mesh(mesh)
+
     return mesh
 
 if __name__ == "__main__":
