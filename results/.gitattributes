@@ -1,2 +1,0 @@
-*.vtu filter=lfs diff=lfs merge=lfs -text
-*.pvd filter=lfs diff=lfs merge=lfs -text

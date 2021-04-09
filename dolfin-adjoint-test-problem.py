@@ -17,6 +17,8 @@ def read_pO2_from_file(filename):
     p_noisy_data = data['pO2_noisy']
     
     mesh = RectangleMesh(Point(-1, -1), Point(1, 1), Nx-1, Ny-1)
+    print(mesh.hmin())
+    print(mesh.hmax())
     V = FunctionSpace(mesh, 'CG', 1)
     W = FunctionSpace(mesh, 'CG', 1)
 
@@ -32,6 +34,11 @@ def read_pO2_from_file(filename):
 
     ### add hole
     mesh = Mesh("rectangular_mesh.xml")
+    mesh = refine(mesh)
+    mesh = refine(mesh)
+    mesh = refine(mesh)
+    print(mesh.hmin())
+    print(mesh.hmax())
     
     R_ves = data['R_ves']
     p_ves = data['p_ves']
@@ -110,7 +117,7 @@ def estimate_M(p_data, V, W, bc, alpha):
     rf = ReducedFunctional(J, control)
 
     ### Solve
-    M_opt = minimize(rf, options={"disp":True})
+    M_opt = minimize(rf, options={"disp":True}, tol=1e-10)
 
     ### Check solution
     p_opt = TrialFunction(V)
@@ -123,20 +130,20 @@ def estimate_M(p_data, V, W, bc, alpha):
 
 if __name__ == "__main__":
 
-    #alpha = 1e-8
-    alpha = 1e-3
+    alpha = 1e-5
 
     #filename = 'pO2_data_low_sigma.npz'
-    filename = 'pO2_data_high_sigma.npz'
+    #filename = 'pO2_data_high_sigma.npz'
     #filename = 'pO2_data_high_d.npz'
-    p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
+    #p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
     
-    #p_exact, p_noisy, V, W, bc = create_synthetic_pO2_data()
+    p_exact, p_noisy, V, W, bc = create_synthetic_pO2_data()
     
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
     
     e1 = errornorm(p_exact, p_noisy)
     e2 = errornorm(p_exact, p_opt)
+    
     print("Error in noisy signal: ", e1)
     print("Error in restored signal: ", e2)
 

@@ -32,7 +32,7 @@ def fenics2nparray(data, boundary_value, r_hole, x, y, hole_coor):
                 data_val = data(point)
                 data_grid[i,j] = data_val
             except:
-                if r[i,j] < r_hole:
-                    data_grid[i,j] = boundary_value
+                #if r[i,j] < r_hole:
+                data_grid[i,j] = boundary_value
 
     return data_grid, r
