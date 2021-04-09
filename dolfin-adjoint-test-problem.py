@@ -59,7 +59,7 @@ def read_pO2_from_file(filename):
     
     return p, p_noisy, V, W, bc 
     
-def create_synthetic_pO2_data():
+def create_synthetic_pO2_data(hole):
 
     R_star = 141.       # characteristic length [um]
     M_star = 1.0e-3     # charcateristic M [mmHg/um**2]
@@ -67,20 +67,26 @@ def create_synthetic_pO2_data():
     R_ves = 6/R_star                # vessel radius
     p_ves = 80./(M_star*R_star**2)  # pO2 at vessel wall
     M = 1
-    #sigma = 5e-4
     sigma = 1/(M_star*R_star**2)    # noise
 
     mesh = Mesh("rectangular_mesh.xml")
     V = FunctionSpace(mesh, 'CG', 1)
     W = FunctionSpace(mesh, 'CG', 1)
 
-    def boundary(x, on_boundary):
-        eps = 0.1
-        r = np.sqrt(x[0]**2 + x[1]**2)
-        b = ((r < R_ves+eps) and on_boundary)
-        return b
-
-    bc = DirichletBC(V, p_ves, boundary)
+    if hole:
+        def boundary(x, on_boundary):
+            eps = 0.1
+            r = np.sqrt(x[0]**2 + x[1]**2)
+            b = ((r < R_ves+eps) and on_boundary)
+            return b
+        bc = DirichletBC(V, p_ves, boundary)
+    else:
+        def boundary(x, on_boundary):
+            eps = 0.03
+            r = np.sqrt(x[0]**2 + x[1]**2)
+            b = (r <= R_ves+eps)
+            return b
+        bc = DirichletBC(V, p_ves, boundary, "pointwise")
 
     ### Solve the noiseless system to find the true p
     p = TrialFunction(V)
@@ -101,7 +107,7 @@ def create_synthetic_pO2_data():
 
 def estimate_M(p_data, V, W, bc, alpha):
 
-    # Solve forward problem (needed for moola)
+    ### Solve forward problem (needed for moola)
     p = TrialFunction(V)
     v = TestFunction(V)
     M = Function(W, name='Control')
@@ -130,6 +136,7 @@ def estimate_M(p_data, V, W, bc, alpha):
 
 if __name__ == "__main__":
 
+    hole = False
     alpha = 1e-5
 
     #filename = 'pO2_data_low_sigma.npz'
@@ -137,7 +144,7 @@ if __name__ == "__main__":
     #filename = 'pO2_data_high_d.npz'
     #p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
     
-    p_exact, p_noisy, V, W, bc = create_synthetic_pO2_data()
+    p_exact, p_noisy, V, W, bc = create_synthetic_pO2_data(hole)
     
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
     
