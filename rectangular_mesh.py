@@ -44,7 +44,7 @@ def rectangular_mesh(hole):
 
 if __name__ == "__main__":
    
-    hole = False
+    hole = True 
     mesh = rectangular_mesh(hole)
     
     mesh_file = File("rectangular_mesh.xml")

@@ -13,12 +13,10 @@ def read_pO2_from_file(filename):
     Nx = len(data['x'])
     Ny = len(data['y'])
     N = int(Nx*Ny)
-    p_exact_data = data['pO2']
-    p_noisy_data = data['pO2_noisy']
+    p_exact_data = data['p']
+    p_noisy_data = data['p_noisy']
     
     mesh = RectangleMesh(Point(-1, -1), Point(1, 1), Nx-1, Ny-1)
-    print(mesh.hmin())
-    print(mesh.hmax())
     V = FunctionSpace(mesh, 'CG', 1)
     W = FunctionSpace(mesh, 'CG', 1)
 
@@ -34,11 +32,11 @@ def read_pO2_from_file(filename):
 
     ### add hole
     mesh = Mesh("rectangular_mesh.xml")
-    mesh = refine(mesh)
-    mesh = refine(mesh)
-    mesh = refine(mesh)
-    print(mesh.hmin())
-    print(mesh.hmax())
+#    mesh = refine(mesh)
+#    mesh = refine(mesh)
+#    mesh = refine(mesh)
+#    print(mesh.hmin())
+#    print(mesh.hmax())
     
     R_ves = data['R_ves']
     p_ves = data['p_ves']
@@ -50,16 +48,17 @@ def read_pO2_from_file(filename):
     p_noisy = interpolate(p_noisy, V)
     
     def boundary(x, on_boundary):
-        eps = 0.1
+        eps = 0.3
         r = np.sqrt(x[0]**2 + x[1]**2)
-        b = ((r < R_ves+eps) and on_boundary)
+        b = (r < R_ves+eps and on_boundary)
         return b
 
     bc = DirichletBC(V, p_ves, boundary)
+    #bc = DirichletBC(V, p_ves, boundary, "pointwise")
     
     return p, p_noisy, V, W, bc 
     
-def create_synthetic_pO2_data(hole):
+def create_synthetic_pO2_data(hole, sigma):
 
     R_star = 141.       # characteristic length [um]
     M_star = 1.0e-3     # charcateristic M [mmHg/um**2]
@@ -67,7 +66,7 @@ def create_synthetic_pO2_data(hole):
     R_ves = 6/R_star                # vessel radius
     p_ves = 80./(M_star*R_star**2)  # pO2 at vessel wall
     M = 1
-    sigma = 1/(M_star*R_star**2)    # noise
+    sigma = sigma/(M_star*R_star**2)    # noise
 
     mesh = Mesh("rectangular_mesh.xml")
     V = FunctionSpace(mesh, 'CG', 1)
@@ -103,7 +102,7 @@ def create_synthetic_pO2_data(hole):
     p_noisy = p.copy(deepcopy=True)
     p_noisy.vector()[:] += noise
 
-    return p, p_noisy, V, W, bc
+    return p, p_noisy, V, W, bc, p_ves, R_ves
 
 def estimate_M(p_data, V, W, bc, alpha):
 
@@ -136,21 +135,19 @@ def estimate_M(p_data, V, W, bc, alpha):
 
 if __name__ == "__main__":
 
-    hole = False
+    filename = 'synthetic_data/pO2_data.npz'
+    p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
+    
+    #hole = False
+    #sigma = 1
+    #p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(hole, sigma)
+    
     alpha = 1e-5
-
-    #filename = 'pO2_data_low_sigma.npz'
-    #filename = 'pO2_data_high_sigma.npz'
-    #filename = 'pO2_data_high_d.npz'
-    #p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
-    
-    p_exact, p_noisy, V, W, bc = create_synthetic_pO2_data(hole)
-    
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
-    
+#    
     e1 = errornorm(p_exact, p_noisy)
     e2 = errornorm(p_exact, p_opt)
-    
+#    
     print("Error in noisy signal: ", e1)
     print("Error in restored signal: ", e2)
 
