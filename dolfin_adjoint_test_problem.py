@@ -4,6 +4,7 @@ import numpy as np
 import scipy.io as sio
 from dolfin_adjoint import *
 import moola
+import matplotlib.pyplot as plt
 np.random.seed(1)
 
 def read_pO2_from_file(filename):
@@ -30,31 +31,27 @@ def read_pO2_from_file(filename):
     p_noisy = Function(V)
     p_noisy.vector()[:] = p_noisy_vector[0][d2v]
 
-    ### add hole
-    mesh = Mesh("rectangular_mesh.xml")
-#    mesh = refine(mesh)
-#    mesh = refine(mesh)
-#    mesh = refine(mesh)
-#    print(mesh.hmin())
-#    print(mesh.hmax())
-    
+    ### interpolate
+#    mesh = Mesh("rectangular_mesh.xml")
+##    mesh = refine(mesh)
+##    mesh = refine(mesh)
+##    mesh = refine(mesh)
+#    
+#    # interpolate
+#    V = FunctionSpace(mesh, 'CG', 1)
+#    W = FunctionSpace(mesh, 'CG', 1)
+#    p = interpolate(p, V)
+#    p_noisy = interpolate(p_noisy, V)
+   
+    ### add boundary condition
     R_ves = data['R_ves']
     p_ves = data['p_ves']
     
-    # interpolate
-    V = FunctionSpace(mesh, 'CG', 1)
-    W = FunctionSpace(mesh, 'CG', 1)
-    p = interpolate(p, V)
-    p_noisy = interpolate(p_noisy, V)
-    
     def boundary(x, on_boundary):
-        eps = 0.3
         r = np.sqrt(x[0]**2 + x[1]**2)
-        b = (r < R_ves+eps and on_boundary)
+        b = (r <= R_ves)
         return b
-
-    bc = DirichletBC(V, p_ves, boundary)
-    #bc = DirichletBC(V, p_ves, boundary, "pointwise")
+    bc = DirichletBC(V, p_ves, boundary, "pointwise")
     
     return p, p_noisy, V, W, bc 
     
@@ -68,7 +65,12 @@ def create_synthetic_pO2_data(hole, sigma):
     M = 1
     sigma = sigma/(M_star*R_star**2)    # noise
 
-    mesh = Mesh("rectangular_mesh.xml")
+    data = np.load('synthetic_data/pO2_data.npz')
+    Nx = len(data['x'])
+    Ny = len(data['y'])
+    
+    mesh = RectangleMesh(Point(-1, -1), Point(1, 1), Nx-1, Ny-1)
+#    mesh = Mesh("rectangular_mesh.xml")
     V = FunctionSpace(mesh, 'CG', 1)
     W = FunctionSpace(mesh, 'CG', 1)
 
@@ -81,7 +83,8 @@ def create_synthetic_pO2_data(hole, sigma):
         bc = DirichletBC(V, p_ves, boundary)
     else:
         def boundary(x, on_boundary):
-            eps = 0.03
+            #eps = 0.03
+            eps = 0.0
             r = np.sqrt(x[0]**2 + x[1]**2)
             b = (r <= R_ves+eps)
             return b
@@ -135,19 +138,19 @@ def estimate_M(p_data, V, W, bc, alpha):
 
 if __name__ == "__main__":
 
-    filename = 'synthetic_data/pO2_data.npz'
-    p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
+#    filename = 'synthetic_data/pO2_data.npz'
+#    p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
     
-    #hole = False
-    #sigma = 1
-    #p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(hole, sigma)
+    hole = False
+    sigma = 0
+    p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(hole, sigma)
     
     alpha = 1e-5
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
-#    
+   
     e1 = errornorm(p_exact, p_noisy)
     e2 = errornorm(p_exact, p_opt)
-#    
+    
     print("Error in noisy signal: ", e1)
     print("Error in restored signal: ", e2)
 

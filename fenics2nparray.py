@@ -16,9 +16,9 @@ def fenics2nparray(data, boundary_value, r_hole, x, y, hole_coor):
         data_grid (array): output data
         r (array): sqrt(X**2 + Y**2)
     """
+    X,Y = np.meshgrid(x,y)
     Nx = len(y)
     Ny = len(x)	
-    X,Y = np.meshgrid(x,y)
     data_grid = np.zeros([Nx, Ny])
 
     r = np.sqrt((X-hole_coor[0])**2 + (Y-hole_coor[1])**2)

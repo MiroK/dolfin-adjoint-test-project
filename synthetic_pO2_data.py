@@ -3,13 +3,14 @@ import numpy as np
 from fenics2nparray import *
 from dolfin_adjoint_test_problem import create_synthetic_pO2_data
 
-hole = True
-sigma = 1
+hole = False
+sigma = 0
 p, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(hole, sigma)
 
 d = 0.007
-x = np.arange(-1, 1, d)
-y = np.arange(-1, 1, d)
+N = np.ceil(2/d)
+x = np.linspace(-1, 1, N)
+y = np.linspace(-1, 1, N)
 p, r = fenics2nparray(p, p_ves, R_ves, x, y, [0,0])
 p_noisy, r = fenics2nparray(p_noisy, p_ves, R_ves, x, y, [0,0])
 np.savez('synthetic_data/pO2_data', \
