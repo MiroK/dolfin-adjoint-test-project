@@ -33,11 +33,11 @@ def read_pO2_from_file(filename):
 
     ### interpolate
 #    mesh = Mesh("rectangular_mesh.xml")
-##    mesh = refine(mesh)
-##    mesh = refine(mesh)
-##    mesh = refine(mesh)
+#    mesh = refine(mesh)
+#    mesh = refine(mesh)
+#    mesh = refine(mesh)
+#    mesh = refine(mesh)
 #    
-#    # interpolate
 #    V = FunctionSpace(mesh, 'CG', 1)
 #    W = FunctionSpace(mesh, 'CG', 1)
 #    p = interpolate(p, V)
@@ -55,7 +55,7 @@ def read_pO2_from_file(filename):
     
     return p, p_noisy, V, W, bc 
     
-def create_synthetic_pO2_data(hole, sigma):
+def create_synthetic_pO2_data(mesh, hole, sigma):
 
     R_star = 141.       # characteristic length [um]
     M_star = 1.0e-3     # charcateristic M [mmHg/um**2]
@@ -65,12 +65,6 @@ def create_synthetic_pO2_data(hole, sigma):
     M = 1
     sigma = sigma/(M_star*R_star**2)    # noise
 
-    data = np.load('synthetic_data/pO2_data.npz')
-    Nx = len(data['x'])
-    Ny = len(data['y'])
-    
-    mesh = RectangleMesh(Point(-1, -1), Point(1, 1), Nx-1, Ny-1)
-#    mesh = Mesh("rectangular_mesh.xml")
     V = FunctionSpace(mesh, 'CG', 1)
     W = FunctionSpace(mesh, 'CG', 1)
 
@@ -141,9 +135,10 @@ if __name__ == "__main__":
 #    filename = 'synthetic_data/pO2_data.npz'
 #    p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
     
+    mesh = Mesh("synthetic_mesh.xml")
     hole = False
     sigma = 0
-    p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(hole, sigma)
+    p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(mesh, hole, sigma)
     
     alpha = 1e-5
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
@@ -155,11 +150,11 @@ if __name__ == "__main__":
     print("Error in restored signal: ", e2)
 
     ### Save solutions
-    file1 = File("results/p_noisy.pvd")
+    file1 = File("results/p_noisy_2.pvd")
     file1 << p_noisy
-    file2 = File("results/p_exact.pvd")
+    file2 = File("results/p_exact_2.pvd")
     file2 << p_exact
-    file3 = File("results/p_optimal.pvd")
+    file3 = File("results/p_optimal_2.pvd")
     file3 << p_opt
-    file4 = File("results/M_optimal.pvd")
+    file4 = File("results/M_optimal_2.pvd")
     file4 << M_opt

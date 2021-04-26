@@ -13,7 +13,7 @@ r = data['r']
 plt.figure(1)
 X, Y = np.meshgrid(x, y)
 cmap = cm.Reds
-f = plt.imshow(p, extent=[min(x), max(x), min(y), max(y)], origin='lower', cmap=cm.get_cmap(cmap))
-#f = plt.imshow(p_noisy, extent=[min(x), max(x), min(y), max(y)], origin='lower', cmap=cm.get_cmap(cmap))
+#f = plt.imshow(p, extent=[min(x), max(x), min(y), max(y)], origin='lower', cmap=cm.get_cmap(cmap))
+f = plt.imshow(p_noisy, extent=[min(x), max(x), min(y), max(y)], origin='lower', cmap=cm.get_cmap(cmap))
 cbar = plt.colorbar(f)
 plt.show()

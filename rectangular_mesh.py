@@ -34,7 +34,7 @@ def rectangular_mesh(hole):
     else: 
         domain = grid
     
-    resolution = 600
+    resolution = 1200
     mesh = generate_mesh(domain, resolution)
 
 #    for n in range(4):
@@ -49,5 +49,5 @@ if __name__ == "__main__":
     
     mesh_file = File("rectangular_mesh.xml")
     mesh_file << mesh
-    plot(mesh)
-    plt.show()
+    #plot(mesh)
+    #plt.show()
