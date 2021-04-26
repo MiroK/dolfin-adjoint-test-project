@@ -1,7 +1,7 @@
 from fenics import *
 import numpy as np
 
-def fenics2nparray(data, boundary_value, r_hole, x, y, hole_coor):
+def fenics2nparray(data, boundary_value, x, y):
     """
     Writes fenics solution to numpy array.
 
@@ -21,8 +21,6 @@ def fenics2nparray(data, boundary_value, r_hole, x, y, hole_coor):
     Ny = len(x)	
     data_grid = np.zeros([Nx, Ny])
 
-    r = np.sqrt((X-hole_coor[0])**2 + (Y-hole_coor[1])**2)
-
     for i in range(Nx):
         for j in range(Ny):
             x_val = X[i,j]
@@ -34,4 +32,4 @@ def fenics2nparray(data, boundary_value, r_hole, x, y, hole_coor):
             except:
                 data_grid[i,j] = boundary_value
 
-    return data_grid, r
+    return data_grid

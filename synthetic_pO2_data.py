@@ -17,8 +17,8 @@ mesh_file << mesh
 hole = False
 sigma = 0
 p, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(mesh, hole, sigma)
-p, r = fenics2nparray(p, p_ves, R_ves, x, y, [0,0])
-p_noisy, r = fenics2nparray(p_noisy, p_ves, R_ves, x, y, [0,0])
+p = fenics2nparray(p, p_ves, x, y)
+p_noisy = fenics2nparray(p_noisy, p_ves, x, y)
 np.savez('synthetic_data/pO2_data', \
     p=p, p_noisy=p_noisy, 
-    r=r, x=x, y=y, d=d, p_ves=p_ves, R_ves=R_ves)
+    x=x, y=y, d=d, p_ves=p_ves, R_ves=R_ves)
