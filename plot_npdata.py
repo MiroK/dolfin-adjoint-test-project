@@ -2,13 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import cm
 
-data = np.load('synthetic_data/pO2_data.npz')
+data = np.load('synthetic_data/pO2_data_sigma_0.npz')
 
 p = data['p']
 p_noisy = data['p_noisy']
 x = data['x']
 y = data['y']
-r = data['r']
 
 plt.figure(1)
 X, Y = np.meshgrid(x, y)

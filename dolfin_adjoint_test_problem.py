@@ -6,6 +6,7 @@ from dolfin_adjoint import *
 import moola
 import matplotlib.pyplot as plt
 np.random.seed(1)
+from fenics2nparray import fenics2nparray
 
 def read_pO2_from_file(filename):
 
@@ -53,7 +54,7 @@ def read_pO2_from_file(filename):
         return b
     bc = DirichletBC(V, p_ves, boundary, "pointwise")
     
-    return p, p_noisy, V, W, bc 
+    return p, p_noisy, V, W, bc, mesh
     
 def create_synthetic_pO2_data(mesh, hole, sigma):
 
@@ -77,7 +78,6 @@ def create_synthetic_pO2_data(mesh, hole, sigma):
         bc = DirichletBC(V, p_ves, boundary)
     else:
         def boundary(x, on_boundary):
-            #eps = 0.03
             eps = 0.0
             r = np.sqrt(x[0]**2 + x[1]**2)
             b = (r <= R_ves+eps)
@@ -132,14 +132,16 @@ def estimate_M(p_data, V, W, bc, alpha):
 
 if __name__ == "__main__":
 
-#    filename = 'synthetic_data/pO2_data.npz'
-#    p_exact, p_noisy, V, W, bc = read_pO2_from_file(filename)
+    filename = 'synthetic_data/pO2_data_sigma_1_Ld.npz'
+    p_exact, p_noisy, V, W, bc, mesh = read_pO2_from_file(filename)
     
     mesh = Mesh("synthetic_mesh.xml")
-    hole = False
-    sigma = 0
-    p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(mesh, hole, sigma)
+#    mesh = Mesh("rectangular_mesh_w_hole.xml")
+#    hole = True
+#    sigma = 0
+#    p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(mesh, hole, sigma)
     
+    #alpha = 1e-5
     alpha = 1e-5
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
    
@@ -150,11 +152,22 @@ if __name__ == "__main__":
     print("Error in restored signal: ", e2)
 
     ### Save solutions
-    file1 = File("results/p_noisy_2.pvd")
+    file1 = File("results/p_noisy.pvd")
     file1 << p_noisy
-    file2 = File("results/p_exact_2.pvd")
+    file2 = File("results/p_exact.pvd")
     file2 << p_exact
-    file3 = File("results/p_optimal_2.pvd")
+    file3 = File("results/p_optimal.pvd")
     file3 << p_opt
-    file4 = File("results/M_optimal_2.pvd")
+    file4 = File("results/M_optimal.pvd")
     file4 << M_opt
+
+    data = np.load(filename)
+    x = data['x']
+    y = data['y']
+    p_exact = fenics2nparray(p_exact, 0, x, y)
+    p_noisy = fenics2nparray(p_noisy, 0, x, y)
+    p_opt = fenics2nparray(p_opt, 0, x, y)
+    M_opt = fenics2nparray(M_opt, 0, x, y)
+    
+    np.savez('results/results_sigma_1_Ld_5.npz', p_exact=p_exact, p_noisy=p_noisy, p_opt=p_opt, M_opt=M_opt, x=x, y=y, alpha=alpha)
+
