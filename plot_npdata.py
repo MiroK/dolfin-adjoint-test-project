@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import cm
 
-data = np.load('synthetic_data/pO2_data_sigma_0.npz')
+data = np.load('synthetic_data/pO2_data_manyvessels.npz')
 
 p = data['p']
 p_noisy = data['p_noisy']
