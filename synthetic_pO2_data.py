@@ -3,6 +3,7 @@ import numpy as np
 from fenics2nparray import *
 from dolfin_adjoint_test_problem import create_synthetic_pO2_data
 from dolfin_adjoint import *
+from scipy.io import savemat
 
 d = 0.014
 N = np.ceil(2/d)
@@ -22,3 +23,7 @@ p_noisy = fenics2nparray(p_noisy, p_ves, x, y)
 np.savez('synthetic_data/pO2_data_sigma_'+str(sigma)+'_Ld', \
     p=p, p_noisy=p_noisy, 
     x=x, y=y, d=d, p_ves=p_ves, R_ves=R_ves)
+mdic = {"p":p, "p_noisy":p_noisy, "x":x, "y":y, "d":d, "p_ves":p_ves, \
+        "R_ves":R_ves}
+savemat('synthetic_data/pO2_data_sigma_'+str(sigma)+'_Ld.mat', mdic)
+
