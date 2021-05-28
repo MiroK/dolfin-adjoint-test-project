@@ -8,6 +8,41 @@ import matplotlib.pyplot as plt
 np.random.seed(1)
 from fenics2nparray import fenics2nparray
 
+def read_experimental_pO2_from_file(filename):
+
+    ### import data
+    data = np.load(filename)
+    x = data['x']
+    y = data['y']
+    Nx = len(data['x'])
+    Ny = len(data['y'])
+    N = int(Nx*Ny)
+    p_data = data['p']
+    
+    mesh = RectangleMesh(Point(min(x), min(y)), Point(max(x), max(y)), Nx-1, Ny-1)
+    V = FunctionSpace(mesh, 'CG', 1)
+    W = FunctionSpace(mesh, 'CG', 1)
+
+    d2v = dof_to_vertex_map(V)
+    
+    p_vector = np.reshape(p_data, (1, N))
+    p = Function(V)
+    p.vector()[:] = p_vector[0][d2v]
+    
+    ### add boundary condition
+    R_ves = data['R_ves']/2
+    p_ves = data['p_ves']
+    xcoor = data['vessel_xcoor']
+    ycoor = data['vessel_ycoor']
+    
+    def boundary(x, on_boundary):
+        r = np.sqrt((x[0]-xcoor)**2 + (x[1]-ycoor)**2)
+        b = (r <= R_ves)
+        return b
+    bc = DirichletBC(V, p_ves, boundary, "pointwise")
+    
+    return p, V, W, bc, mesh
+
 def read_pO2_from_file(filename):
 
     ### import data
@@ -132,30 +167,33 @@ def estimate_M(p_data, V, W, bc, alpha):
 
 if __name__ == "__main__":
 
-    filename = 'synthetic_data/pO2_data_sigma_1_Ld.npz'
-    p_exact, p_noisy, V, W, bc, mesh = read_pO2_from_file(filename)
+#    filename = 'synthetic_data/pO2_data_sigma_1_Ld.npz'
+#    p_exact, p_noisy, V, W, bc, mesh = read_pO2_from_file(filename)
     
-    mesh = Mesh("synthetic_mesh.xml")
+    filename = 'experimental_data/experimental_dataset6.npz'
+    p_noisy, V, W, bc, mesh = read_experimental_pO2_from_file(filename)
+    
+#    mesh = Mesh("synthetic_mesh.xml")
 #    mesh = Mesh("rectangular_mesh_w_hole.xml")
 #    hole = True
 #    sigma = 0
 #    p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(mesh, hole, sigma)
     
     #alpha = 1e-5
-    alpha = 1e-5
+    alpha = 2
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
    
-    e1 = errornorm(p_exact, p_noisy)
-    e2 = errornorm(p_exact, p_opt)
-    
-    print("Error in noisy signal: ", e1)
-    print("Error in restored signal: ", e2)
+#    e1 = errornorm(p_exact, p_noisy)
+#    e2 = errornorm(p_exact, p_opt)
+#    
+#    print("Error in noisy signal: ", e1)
+#    print("Error in restored signal: ", e2)
 
     ### Save solutions
     file1 = File("results/p_noisy.pvd")
     file1 << p_noisy
-    file2 = File("results/p_exact.pvd")
-    file2 << p_exact
+#    file2 = File("results/p_exact.pvd")
+#    file2 << p_exact
     file3 = File("results/p_optimal.pvd")
     file3 << p_opt
     file4 = File("results/M_optimal.pvd")
@@ -164,10 +202,10 @@ if __name__ == "__main__":
     data = np.load(filename)
     x = data['x']
     y = data['y']
-    p_exact = fenics2nparray(p_exact, 0, x, y)
+#    p_exact = fenics2nparray(p_exact, 0, x, y)
     p_noisy = fenics2nparray(p_noisy, 0, x, y)
     p_opt = fenics2nparray(p_opt, 0, x, y)
     M_opt = fenics2nparray(M_opt, 0, x, y)
     
-    np.savez('results/results_sigma_1_Ld_5.npz', p_exact=p_exact, p_noisy=p_noisy, p_opt=p_opt, M_opt=M_opt, x=x, y=y, alpha=alpha)
+    np.savez('results/results_dataset6_alpha20.npz', p_noisy=p_noisy, p_opt=p_opt, M_opt=M_opt, x=x, y=y, alpha=alpha)
 
