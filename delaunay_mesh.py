@@ -13,7 +13,7 @@ def delaunay_mesh(points_2d):
     return build_mesh(tri.points, tri.simplices)
 
 
-def build_mesh(vertices, cells):
+def build_mesh(vertices, cells, cell=None):
     '''Simplex mesh from coordinates and cell-vertex connectivity'''
     nvertices, gdim = vertices.shape
 
@@ -23,12 +23,15 @@ def build_mesh(vertices, cells):
     mesh = df.Mesh()
     editor = df.MeshEditor()
 
-    cell_type = {1: 'interval',
-                 2: 'triangle',
-                 3: 'tetrahedron'}[tdim]
-    cell_type = ufl.Cell(cell_type, gdim)
+    if cell is None:
+        cell_type = {1: 'interval',
+                     2: 'triangle',
+                     3: 'tetrahedron'}[tdim]
+        cell = ufl.Cell(cell_type, gdim)
+    else:
+        assert cell.geometric_dimension() == gdim
 
-    editor.open(mesh, str(cell_type), tdim, gdim)            
+    editor.open(mesh, str(cell), tdim, gdim)            
 
     editor.init_vertices(nvertices)
     editor.init_cells(ncells)
