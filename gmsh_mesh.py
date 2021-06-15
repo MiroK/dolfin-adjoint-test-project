@@ -77,10 +77,17 @@ class Disk(Shape):
         
         model.addPhysicalGroup(2, [disk], tag=1)
         
-        bdry = model.getBoundary([(2, disk)])
+        bdry = [p[1] for p in model.getBoundary([(2, disk)])]
         # NOTE: we have 2 surfaces marked for boundary conditions
+        # The inside shall be tagged as 1 and outside as 2
+        _, maybe_in = factory.getEntitiesInBoundingBox(cx-1.001*self.in_radius, cy-1.001*self.in_radius, -10,
+                                                       cx+1.001*self.in_radius, cy+1.001*self.in_radius, 10, dim=1)[0]
+
+        if bdry[0] != maybe_in:
+            bdry = reversed(bdry)
+
         for tag, curve in enumerate(bdry, 1):
-            model.addPhysicalGroup(1, [curve[1]], tag)
+            model.addPhysicalGroup(1, [curve], tag)
             
         # Return the surface that embeds points
         return disk
@@ -173,15 +180,19 @@ if __name__ == '__main__':
     # NOTE: here we will have points with radius 2 but our domain will
     # only have radius 1. To avoid points on the boundary we kick some
     # out
-    r = r[np.logical_and(np.logical_or(r < 0.9, r > 1.1),   # Outradius
-                         np.logical_or(r < 0.4, r > 0.2))]  # Inradius
+    tol = 0.05
+    in_radius, out_radius = 0.2, 1.0
+    
+    r = r[np.logical_and(np.logical_or(r < out_radius+tol, r > out_radius-tol),   # Outradius
+                         np.logical_or(r < in_radius+tol, r > in_radius-tol))]  # Inradius
     th = 2*np.pi*np.random.rand(len(r))
     x, y = cx + r*np.sin(th), cy + r*np.cos(th)
     
     embed_points = np.c_[x, y]
     data_points = 2*x**2 + 3*y**2
 
-    bounding_shape = Disk(center=np.array([0, 0]), out_radius=1., in_radius=0.3)
+    center = np.array([cx, cy])
+    bounding_shape = Disk(center=center, out_radius=out_radius, in_radius=in_radius)
 
     # NOTE: We want all the points to be strictly inside the boundary
     mesh, entity_functions, inside_points = gmsh_mesh(embed_points, resolution=0.125,
@@ -215,6 +226,20 @@ if __name__ == '__main__':
     # Of course, the function is incomplete
     df.File(f'gmsh_foo_{bounding_shape}.pvd') << f
 
+    # Let's also make sure that inside is labeled as 1 and outside is
+    # labeled as 2
+    _, e2v = mesh.init(1, 0), mesh.topology()(1, 0)
+    facet_f = entity_functions[1].array()
+    
+    inner_indices = np.unique(np.hstack([e2v(e) for e in np.where(facet_f == 1)[0]]))
+    inner_vertices = mesh_coordinates[inner_indices]
+    assert np.all(np.linalg.norm(inner_vertices - center, 2, axis=1) - in_radius) < 1E-10
+
+    outer_indices = np.unique(np.hstack([e2v(e) for e in np.where(facet_f == 2)[0]]))
+    outer_vertices = mesh_coordinates[outer_indices]
+    assert np.all(np.linalg.norm(outer_vertices - center, 2, axis=1) - out_radius) < 1E-10    
+
     # TODO:
-    # - domain with hole(s) - we should then kick out measurement points
+    # - rectangle
+    # - rectnagle hole
     # - one shot approach
