@@ -4,39 +4,120 @@ import gmsh
 import sys
 
 
-def circle(model, factory, embed_points, center=None, radius=None, scale_radius=1.1):
+class Shape:
+    def is_inside(self, points):
+        '''Indices of inside points'''
+        pass
+
+    def insert_gmsh(self, model, factory):
+        '''Insert myself into model using factory'''
+        pass
+
+
+class Circle(Shape):
     '''Circle enclosing points'''
-    # Take center of mass
-    if center is None:
-        center = np.mean(embed_points, axis=0)
+    def __init__(self, center, radius):
+        self.center = center
+        self.radius = radius
+
+    def __repr__(self):
+        return 'Circle'
+
+    def is_inside(self, points):
+        return np.where(np.linalg.norm(points-self.center, 2, axis=1)**2 < self.radius**2)
+
+    def insert_gmsh(self, model, factory):
+        cx, cy = self.center
+        circle = factory.addCircle(cx, cy, 0, self.radius)
+        loop = factory.addCurveLoop([circle])
+        circle = factory.addPlaneSurface([loop])
+
+        factory.synchronize()
         
-    if radius is None:
-        radius = np.max(np.linalg.norm(embed_points-center, 2, axis=1))
-        radius = radius*scale_radius
-    else:
-        radius = radius*scale_radius
+        model.addPhysicalGroup(2, [circle], tag=1)
+        
+        bdry = model.getBoundary([(2, circle)])
+        
+        for tag, curve in enumerate(bdry, 1):
+            model.addPhysicalGroup(1, [curve[1]], tag)
+            
+        # Return the surface that embeds points
+        return circle
 
-    # All embed_points should be inside
-    assert np.all(np.linalg.norm(embed_points-center, 2, axis=1)**2 < radius**2)
-
-    cx, cy = center
-    circle = factory.addCircle(cx, cy, 0, radius)
-    loop = factory.addCurveLoop([circle])
-    circle = factory.addPlaneSurface([loop])
-
-    factory.synchronize()
-
-    model.addPhysicalGroup(2, [circle], tag=1)
     
-    bdry = model.getBoundary([(2, circle)])
+class Disk(Shape):
+    '''Circle enclosing points'''
+    def __init__(self, center, in_radius, out_radius):
+        assert in_radius < out_radius
+        self.center = center
+        self.in_radius = in_radius
+        self.out_radius = out_radius
 
-    for tag, curve in enumerate(bdry, 1):
-        model.addPhysicalGroup(1, [curve[1]], tag)
+    def __repr__(self):
+        return 'Disk'
 
-    # Return the surface that embeds points
-    return circle
+    def is_inside(self, points):
+        return np.where(np.logical_and(np.linalg.norm(points-self.center, 2, axis=1)**2 < self.out_radius**2,
+                                       np.linalg.norm(points-self.center, 2, axis=1)**2 > self.in_radius**2))
+
+    def insert_gmsh(self, model, factory):
+        cx, cy = self.center
+        
+        out_circle = factory.addCircle(cx, cy, 0, self.out_radius)
+        in_circle = factory.addCircle(cx, cy, 0, self.in_radius)
+
+        factory.synchronize()
+
+        oloop = factory.addCurveLoop([out_circle])
+        iloop = factory.addCurveLoop([in_circle])        
+
+        disk = factory.addPlaneSurface([oloop, iloop])
+
+        factory.synchronize()
+        
+        model.addPhysicalGroup(2, [disk], tag=1)
+        
+        bdry = model.getBoundary([(2, disk)])
+        # NOTE: we have 2 surfaces marked for boundary conditions
+        for tag, curve in enumerate(bdry, 1):
+            model.addPhysicalGroup(1, [curve[1]], tag)
+            
+        # Return the surface that embeds points
+        return disk
+
+# def rectangle(model, factory, embed_points, ll=None, ur=None, scale_radius=1.1):
+#     '''Rectangle enclosing points'''
+#     # Take center of mass
+#     if ll is None:
+#         ll = np.min(embed_points, axis=0)
+        
+#     if ur is None:
+#         ur = np.max(embed_points, axis=0)
+
+#     dx = ur - ll
+
+#     ll += -0.1*scale_radius*dx
+#     ur += 0.1*scale_radius*dx
+#     dx = ur - ll
+
+#     # All embed_points should be inside
+#     assert np.all(np.logical_and(embed_points[:, 0] > ll[0], embed_points[:, 0] < ur[0]))
+#     assert np.all(np.logical_and(embed_points[:, 1] > ll[1], embed_points[:, 1] < ur[1]))    
+
+#     square = factory.addRectangle(x=ll[0], y=ll[1], z=0, dx=dx[0], dy=dx[1])
+
+#     factory.synchronize()
+#     bdry = model.getBoundary([(2, square)])
+#     model.addPhysicalGroup(2, [square], tag=1)
+
+#     for tag, curve in enumerate(bdry, 1):
+#         model.addPhysicalGroup(1, [curve[1]], tag)
+
+#     # Return the surface that embeds points
+#     return square
 
 
+# Generic
 def gmsh_mesh(embed_points, resolution, bounding_shape):
     '''Mesh bounded by bounded shape with embedded points'''
     nembed_points, gdim = embed_points.shape
@@ -49,7 +130,11 @@ def gmsh_mesh(embed_points, resolution, bounding_shape):
     factory = model.occ
 
     # How to bound the points returing tag of embedding surface
-    bding_surface = bounding_shape(model, factory, embed_points)
+    bding_surface = bounding_shape.insert_gmsh(model, factory)
+
+    inside_points, = bounding_shape.is_inside(embed_points)
+
+    embed_points = embed_points[inside_points]
     # Embed_Points in surface we want to keep track of
     point_tags = [factory.addPoint(*point, z=0) for point in embed_points]
 
@@ -61,8 +146,8 @@ def gmsh_mesh(embed_points, resolution, bounding_shape):
     factory.synchronize()
 
     # NOTE: if you want to see it first
-    gmsh.fltk.initialize()
-    gmsh.fltk.run()
+    # gmsh.fltk.initialize()
+    # gmsh.fltk.run()
         
     nodes, topologies = msh_gmsh_model(model,
                                        2,
@@ -72,7 +157,7 @@ def gmsh_mesh(embed_points, resolution, bounding_shape):
 
     gmsh.finalize()
 
-    return mesh, entity_functions
+    return mesh, entity_functions, inside_points
 
 # --------------------------------------------------------------------
 
@@ -84,22 +169,23 @@ if __name__ == '__main__':
 
     cx, cy = 0., 0.
     # Synthetic
-    r = np.random.rand(1000)
-    th = 2*np.pi*np.random.rand(1000)
+    r = 2*np.random.rand(1000)
+    # NOTE: here we will have points with radius 2 but our domain will
+    # only have radius 1. To avoid points on the boundary we kick some
+    # out
+    r = r[np.logical_and(np.logical_or(r < 0.9, r > 1.1),   # Outradius
+                         np.logical_or(r < 0.4, r > 0.2))]  # Inradius
+    th = 2*np.pi*np.random.rand(len(r))
     x, y = cx + r*np.sin(th), cy + r*np.cos(th)
     
     embed_points = np.c_[x, y]
     data_points = 2*x**2 + 3*y**2
 
-    data_path = './xyz_example_data.npz'
-    data = np.load(data_path)
-
-    embed_points = np.c_[data['x'], data['y']]
-    data_point = data['z']
+    bounding_shape = Disk(center=np.array([0, 0]), out_radius=1., in_radius=0.3)
 
     # NOTE: We want all the points to be strictly inside the boundary
-    mesh, entity_functions = gmsh_mesh(embed_points, resolution=0.25,
-                                       bounding_shape=lambda m, f, p, c=None, r=None, sr=1.1: circle(m, f, p))
+    mesh, entity_functions, inside_points = gmsh_mesh(embed_points, resolution=0.125,
+                                                      bounding_shape=bounding_shape)
     
     mesh_coordinates = mesh.coordinates()
     # Let's check point embedding
@@ -107,7 +193,11 @@ if __name__ == '__main__':
     vertex_values = vertex_function.array()
 
     nnz_idx, = np.where(vertex_values > 0)  # Dolfin mesh index
-    gmsh_idx = vertex_values[nnz_idx] - 1  # We based the physical tag on order 
+    gmsh_idx = vertex_values[nnz_idx] - 1  # We based the physical tag on order
+
+    # NOTE: account for points that have been kicked out
+    embed_points = embed_points[inside_points]
+    data_points = data_points[inside_points]
 
     assert np.linalg.norm(mesh_coordinates[nnz_idx] - embed_points[gmsh_idx]) < 1E-13
 
@@ -123,4 +213,8 @@ if __name__ == '__main__':
     assert all(abs(f(x) - target) < 1E-13 for x, target in zip(embed_points, data_points))
 
     # Of course, the function is incomplete
-    df.File('gmsh_foo.pvd') << f
+    df.File(f'gmsh_foo_{bounding_shape}.pvd') << f
+
+    # TODO:
+    # - domain with hole(s) - we should then kick out measurement points
+    # - one shot approach
