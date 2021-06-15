@@ -4,11 +4,8 @@ import gmsh
 import sys
 
 
-def circle_mesh(embed_points, resolution, center=None, radius=None, scale_radius=1.1):
-    '''Circle mesh with embedded points'''
-    nembed_points, gdim = embed_points.shape
-
-    assert gdim == 2
+def circle(model, factory, embed_points, center=None, radius=None, scale_radius=1.1):
+    '''Circle enclosing points'''
     # Take center of mass
     if center is None:
         center = np.mean(embed_points, axis=0)
@@ -21,11 +18,6 @@ def circle_mesh(embed_points, resolution, center=None, radius=None, scale_radius
 
     # All embed_points should be inside
     assert np.all(np.linalg.norm(embed_points-center, 2, axis=1)**2 < radius**2)
-
-    gmsh.initialize(sys.argv)
-
-    model = gmsh.model
-    factory = model.occ
 
     cx, cy = center
     circle = factory.addCircle(cx, cy, 0, radius)
@@ -41,19 +33,36 @@ def circle_mesh(embed_points, resolution, center=None, radius=None, scale_radius
     for tag, curve in enumerate(bdry, 1):
         model.addPhysicalGroup(1, [curve[1]], tag)
 
+    # Return the surface that embeds points
+    return circle
+
+
+def gmsh_mesh(embed_points, resolution, bounding_shape):
+    '''Mesh bounded by bounded shape with embedded points'''
+    nembed_points, gdim = embed_points.shape
+
+    assert gdim == 2
+
+    gmsh.initialize(sys.argv)
+
+    model = gmsh.model
+    factory = model.occ
+
+    # How to bound the points returing tag of embedding surface
+    bding_surface = bounding_shape(model, factory, embed_points)
     # Embed_Points in surface we want to keep track of
     point_tags = [factory.addPoint(*point, z=0) for point in embed_points]
 
     factory.synchronize()    
     for phys_tag, tag in enumerate(point_tags, 1):
         model.addPhysicalGroup(0, [tag], phys_tag)
-    model.mesh.embed(0, point_tags, 2, circle)
+    model.mesh.embed(0, point_tags, 2, bding_surface)
 
     factory.synchronize()
 
     # NOTE: if you want to see it first
-    # gmsh.fltk.initialize()
-    # gmsh.fltk.run()
+    gmsh.fltk.initialize()
+    gmsh.fltk.run()
         
     nodes, topologies = msh_gmsh_model(model,
                                        2,
@@ -82,11 +91,15 @@ if __name__ == '__main__':
     embed_points = np.c_[x, y]
     data_points = 2*x**2 + 3*y**2
 
+    data_path = './xyz_example_data.npz'
+    data = np.load(data_path)
+
+    embed_points = np.c_[data['x'], data['y']]
+    data_point = data['z']
+
     # NOTE: We want all the points to be strictly inside the boundary
-    mesh, entity_functions = circle_mesh(embed_points, resolution=0.25,
-                                         center=np.array([cx, cy]),
-                                         radius=1,
-                                         scale_radius=1.1)
+    mesh, entity_functions = gmsh_mesh(embed_points, resolution=0.25,
+                                       bounding_shape=lambda m, f, p, c=None, r=None, sr=1.1: circle(m, f, p))
     
     mesh_coordinates = mesh.coordinates()
     # Let's check point embedding
