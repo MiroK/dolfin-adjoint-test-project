@@ -2,7 +2,6 @@ from gmsh_interpot import msh_gmsh_model, mesh_from_gmsh
 from itertools import chain
 import numpy as np
 import gmsh
-import sys
 
 
 class Shape:
@@ -17,7 +16,7 @@ class Shape:
         pass
 
     def filter(self, truths):
-        print(f'Removing {sum(truths)}/{len(truths)}')
+        print(f'Keeping {sum(truths)}/{len(truths)}')
         return np.where(truths)
 
 
@@ -193,13 +192,13 @@ class RectangleHole(Shape):
 
 
 # Generic
-def gmsh_mesh(embed_points, resolution, bounding_shape):
+def gmsh_mesh(embed_points, bounding_shape, argv=[]):
     '''Mesh bounded by bounded shape with embedded points'''
     nembed_points, gdim = embed_points.shape
 
     assert gdim == 2
 
-    gmsh.initialize(sys.argv)
+    gmsh.initialize(argv)
 
     model = gmsh.model
     factory = model.occ
@@ -221,13 +220,9 @@ def gmsh_mesh(embed_points, resolution, bounding_shape):
     factory.synchronize()
 
     # NOTE: if you want to see it first
-    # gmsh.fltk.initialize()
-    # gmsh.fltk.run()
         
     nodes, topologies = msh_gmsh_model(model,
-                                       2,
-                                       # Globally refine
-                                       number_options={'Mesh.CharacteristicLengthFactor': resolution})
+                                       2)
     mesh, entity_functions = mesh_from_gmsh(nodes, topologies)
 
     gmsh.finalize()
@@ -238,6 +233,7 @@ def gmsh_mesh(embed_points, resolution, bounding_shape):
 
 if __name__ == '__main__':
     import dolfin as df
+    import sys
     # NOTE: `gmsh_mesh.py -clscale 0.5`
     # will perform global refinement (halving sizes), 0.25 is even finer etc
 
@@ -263,8 +259,9 @@ if __name__ == '__main__':
     bounding_shape = RectangleHole(ll, ur, center=center, radius=radius)
 
     # NOTE: We want all the points to be strictly inside the boundary
-    mesh, entity_functions, inside_points = gmsh_mesh(embed_points, resolution=0.125,
-                                                      bounding_shape=bounding_shape)
+    mesh, entity_functions, inside_points = gmsh_mesh(embed_points,
+                                                      bounding_shape=bounding_shape,
+                                                      argv=sys.argv)
     
     mesh_coordinates = mesh.coordinates()
     # Let's check point embedding
@@ -304,7 +301,6 @@ if __name__ == '__main__':
     for tag in (2, 3, 4, 5):
         outer_indices = np.unique(np.hstack([e2v(e) for e in np.where(facet_f == tag)[0]]))
         outer_vertices = mesh_coordinates[outer_indices]
-        print(outer_vertices)
         assert np.all(
             np.logical_or(np.logical_or(np.abs(outer_vertices[:, 0]-ll[0]) < 1E-10,
                                         np.abs(outer_vertices[:, 1]-ll[1]) < 1E-10),
@@ -334,8 +330,9 @@ if __name__ == '__main__':
     bounding_shape = Disk(center=center, out_radius=out_radius, in_radius=in_radius)
 
     # NOTE: We want all the points to be strictly inside the boundary
-    mesh, entity_functions, inside_points = gmsh_mesh(embed_points, resolution=0.125,
-                                                      bounding_shape=bounding_shape)
+    mesh, entity_functions, inside_points = gmsh_mesh(embed_points,
+                                                      bounding_shape=bounding_shape,
+                                                      argv=sys.argv)
     
     mesh_coordinates = mesh.coordinates()
     # Let's check point embedding
