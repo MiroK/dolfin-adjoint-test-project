@@ -7,6 +7,80 @@ import moola
 import matplotlib.pyplot as plt
 np.random.seed(1)
 from fenics2nparray import fenics2nparray
+from scipy.spatial import Delaunay
+#import dolfin as df
+import ufl
+
+def delaunay_mesh(points_2d):
+    '''Delaunay mesh from points'''
+    _, gdim = points_2d.shape
+    assert gdim == 2
+
+    tri = Delaunay(points_2d)
+
+    return build_mesh(tri.points, tri.simplices)
+
+
+def build_mesh(vertices, cells):
+    '''Simplex mesh from coordinates and cell-vertex connectivity'''
+    nvertices, gdim = vertices.shape
+
+    ncells, tdim_ = cells.shape
+    tdim = tdim_ - 1
+
+    mesh = Mesh()
+    editor = MeshEditor()
+
+    cell_type = {1: 'interval',
+                 2: 'triangle',
+                 3: 'tetrahedron'}[tdim]
+    cell_type = ufl.Cell(cell_type, gdim)
+
+    editor.open(mesh, str(cell_type), tdim, gdim)            
+
+    editor.init_vertices(nvertices)
+    editor.init_cells(ncells)
+
+    for vi, x in enumerate(vertices):
+        editor.add_vertex(vi, x)
+
+    for ci, c in enumerate(cells):
+        editor.add_cell(ci, c)
+    
+    editor.close()
+
+    return mesh
+
+def read_experimental_pO2_from_file_radial(filename):
+    
+    ### import data
+    data = np.load(filename)
+    points_2d = np.c_[data['x'], data['y']]
+    
+    mesh = delaunay_mesh(points_2d)
+    # NOTE: for embedding data it is useful that we preserve node order
+    assert np.linalg.norm(mesh.coordinates() - points_2d) < 1E-10
+    # so we can just populate P1 function with
+    W = FunctionSpace(mesh, 'CG', 1)    
+    V = FunctionSpace(mesh, 'CG', 1)    
+    d2v = dof_to_vertex_map(V)
+
+    p = Function(V)
+    p.vector().set_local(data['z'][d2v]) 
+    
+    ### add boundary condition
+    R_ves = data['R_ves']/2
+    p_ves = data['p_ves']
+    xcoor = data['vessel_xcoor']
+    ycoor = data['vessel_ycoor']
+    
+    def boundary(x, on_boundary):
+        r = np.sqrt((x[0]-xcoor)**2 + (x[1]-ycoor)**2)
+        b = (r <= R_ves)
+        return b
+    bc = DirichletBC(V, p_ves, boundary, "pointwise")
+    
+    return p, V, W, bc, mesh
 
 def read_experimental_pO2_from_file(filename):
 
@@ -30,7 +104,7 @@ def read_experimental_pO2_from_file(filename):
     p.vector()[:] = p_vector[0][d2v]
     
     ### add boundary condition
-    R_ves = data['R_ves']/2
+    R_ves = data['R_ves']
     p_ves = data['p_ves']
     xcoor = data['vessel_xcoor']
     ycoor = data['vessel_ycoor']
@@ -170,8 +244,11 @@ if __name__ == "__main__":
 #    filename = 'synthetic_data/pO2_data_sigma_1_Ld.npz'
 #    p_exact, p_noisy, V, W, bc, mesh = read_pO2_from_file(filename)
     
-    filename = 'experimental_data/experimental_dataset6.npz'
-    p_noisy, V, W, bc, mesh = read_experimental_pO2_from_file(filename)
+    #filename = 'experimental_data/experimental_dataset6.npz'
+    #filename = 'experimental_data/experimental_example_1a_square.npz'
+    filename = 'experimental_data/xyz_example_data_a.npz'
+    p_noisy, V, W, bc, mesh = read_experimental_pO2_from_file_radial(filename)
+    #p_noisy, V, W, bc, mesh = read_experimental_pO2_from_file(filename)
     
 #    mesh = Mesh("synthetic_mesh.xml")
 #    mesh = Mesh("rectangular_mesh_w_hole.xml")
@@ -179,8 +256,7 @@ if __name__ == "__main__":
 #    sigma = 0
 #    p_exact, p_noisy, V, W, bc, p_ves, R_ves = create_synthetic_pO2_data(mesh, hole, sigma)
     
-    #alpha = 1e-5
-    alpha = 2
+    alpha = 1e-1
     p_opt, M_opt = estimate_M(p_noisy, V, W, bc, alpha)
    
 #    e1 = errornorm(p_exact, p_noisy)
@@ -199,13 +275,13 @@ if __name__ == "__main__":
     file4 = File("results/M_optimal.pvd")
     file4 << M_opt
 
-    data = np.load(filename)
-    x = data['x']
-    y = data['y']
-#    p_exact = fenics2nparray(p_exact, 0, x, y)
-    p_noisy = fenics2nparray(p_noisy, 0, x, y)
-    p_opt = fenics2nparray(p_opt, 0, x, y)
-    M_opt = fenics2nparray(M_opt, 0, x, y)
-    
-    np.savez('results/results_dataset6_alpha20.npz', p_noisy=p_noisy, p_opt=p_opt, M_opt=M_opt, x=x, y=y, alpha=alpha)
+#    data = np.load(filename)
+#    x = data['x']
+#    y = data['y']
+###    p_exact = fenics2nparray(p_exact, 0, x, y)
+#    p_noisy = fenics2nparray(p_noisy, 0, x, y)
+#    p_opt = fenics2nparray(p_opt, 0, x, y)
+#    M_opt = fenics2nparray(M_opt, 0, x, y)
+#    
+#    np.savez('results/experimental_example_1b_alpha_2_0.npz', p_noisy=p_noisy, p_opt=p_opt, M_opt=M_opt, x=x, y=y, alpha=alpha)
 
