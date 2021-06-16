@@ -1,8 +1,12 @@
 import numpy as np
 from dolfin import *
 
+L2_inner = lambda u, v, dx: inner(u, v)*dx
+H10_inner = lambda u, v, dx: inner(grad(u), grad(v))*dx
 
-def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha):
+
+def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha,
+             regularization=H10_inner):
     '''
     Here we with to solve: min_{u, f} (1/2)*norm(u - data)**2 + alpha/2*inner(f', f')*dx
     subject to
@@ -30,9 +34,9 @@ def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha):
     u, f, lm = TrialFunctions(W)
     v, g, dlm = TestFunctions(W)
       
-    a = (inner(u, v)*dP(1)                                       + inner(grad(v), grad(lm))*dx
-                                         +alpha*inner(grad(f), grad(g))*dx -inner(g, lm)*dx
-         +inner(grad(u), grad(dlm))*dx  - inner(f, dlm)*dx)
+    a = (inner(u, v)*dP(1)                                                 +inner(grad(v), grad(lm))*dx
+                                         +alpha*H10_inner(f, g, dx) -inner(g, lm)*dx
+         +inner(grad(u), grad(dlm))*dx   -inner(f, dlm)*dx)
     # FIXME: there should be neumann terms here somewhere
     L = inner(data, v)*dP(1)
     # State Dirichlet
@@ -94,7 +98,8 @@ if __name__ == '__main__':
                                                      'neumann': {2: Constant(0)}},
                                           multiplier_bcs={'neumann': {1: Constant(0), 2: Constant(0)},
                                                           'dirichlet': {}},
-                                          alpha=Constant(1E0))
+                                          alpha=Constant(1E0),
+                                          regularization=H10_inner)
 
     File('data.pvd') << u_data
     File('state.pvd') << state
