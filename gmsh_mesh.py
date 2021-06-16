@@ -53,11 +53,12 @@ class Circle(Shape):
     
 class Disk(Shape):
     '''Disk enclosing points'''
-    def __init__(self, center, in_radius, out_radius):
+    def __init__(self, center, in_radius, out_radius, sizes=None):
         assert in_radius < out_radius
         self.center = center
         self.in_radius = in_radius
         self.out_radius = out_radius
+        self.sizes = sizes
 
     def __repr__(self):
         return 'Disk'
@@ -94,6 +95,36 @@ class Disk(Shape):
 
         for tag, curve in enumerate(bdry, 1):
             model.addPhysicalGroup(1, [curve], tag)
+
+        if self.sizes is not None:
+            sizes = self.sizes
+            dr = self.out_radius - self.in_radius
+            
+            fields = []
+            idx = 0
+            for prefix, curve in zip(('in_', 'out_'), (in_circle, out_circle)):
+                idx += 1                
+                model.mesh.field.add('Distance', idx)
+                model.mesh.field.setNumbers(idx, 'CurvesList', [curve])
+                model.mesh.field.setNumber(idx, 'NumPointsPerCurve', 100)
+
+                idx += 1
+                model.mesh.field.add('Threshold', idx)
+                model.mesh.field.setNumber(idx, 'InField', idx-1)        
+                model.mesh.field.setNumber(idx, 'SizeMax', sizes[f'{prefix}max'])
+                model.mesh.field.setNumber(idx, 'SizeMin', sizes[f'{prefix}min'])
+                model.mesh.field.setNumber(idx, 'DistMin', 0.1*dr)
+                model.mesh.field.setNumber(idx, 'DistMax', 0.2*dr)
+
+                fields.append(idx)
+
+            idx += 1                
+            model.mesh.field.add('Min', idx)
+            model.mesh.field.setNumbers(idx, 'FieldsList', fields)
+            model.mesh.field.setAsBackgroundMesh(idx)
+
+            gmsh.model.occ.synchronize()
+            gmsh.model.geo.synchronize()    
             
         # Return the surface that embeds points
         return disk
@@ -220,6 +251,8 @@ def gmsh_mesh(embed_points, bounding_shape, argv=[]):
     factory.synchronize()
 
     # NOTE: if you want to see it first
+    # gmsh.fltk.initialize()
+    # gmsh.fltk.run()
         
     nodes, topologies = msh_gmsh_model(model,
                                        2)
@@ -327,7 +360,9 @@ if __name__ == '__main__':
     data_points = 2*x**2 + 3*y**2
 
     center = np.array([cx, cy])
-    bounding_shape = Disk(center=center, out_radius=out_radius, in_radius=in_radius)
+    bounding_shape = Disk(center=center, out_radius=out_radius, in_radius=in_radius,
+                          sizes={'in_min': 0.01, 'in_max': 1,
+                                 'out_min': 0.1, 'out_max': 1})
 
     # NOTE: We want all the points to be strictly inside the boundary
     mesh, entity_functions, inside_points = gmsh_mesh(embed_points,

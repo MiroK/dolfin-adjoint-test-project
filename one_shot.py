@@ -43,12 +43,10 @@ def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha):
     wh = Function(W)
     solve(a == L, wh, bcs)
 
-    uh, fh, lmh = wh.split(deepcopy=True)
-
-    for x in (uh, fh, lmh):
-        assert np.all(~np.isnan(x.vector().get_local()))
+    assert not np.any(np.isnan(wh.vector().get_local()))
+    print(f'dim(W) = {W.dim()}')
     
-    return uh, fh, lmh
+    return wh.split(deepcopy=True)
 
 # --------------------------------------------------------------------
 
@@ -65,9 +63,11 @@ if __name__ == '__main__':
     outer_r = 1.1*np.max(np.linalg.norm(points-center, 2, axis=1))
     inner_r = 0.9*np.min(np.linalg.norm(points-center, 2, axis=1))
 
-    print(inner_r, outer_r, center)
-
-    disk = Disk(center, in_radius=inner_r, out_radius=outer_r)
+    disk = Disk(center, in_radius=inner_r, out_radius=outer_r,
+                # NOTE: this is an option to set the mesh size finner
+                # in the inner hole compared to the outer boundary
+                sizes={'in_min': 2*np.pi*inner_r/40, 'in_max': 1,
+                       'out_min': 2*np.pi*outer_r/200, 'out_max': 1})
     mesh, entity_functions, inside_points = gmsh_mesh(points,
                                                       bounding_shape=disk,
                                                       argv=sys.argv)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
 
     # Let's solve it
     state, control, multiplier = one_shot(u_data, entity_functions,
-                                          state_bcs={'dirichlet': {1: Constant(1)},
+                                          state_bcs={'dirichlet': {1: Constant(1)},  # 1 is inner
                                                      'neumann': {2: Constant(0)}},
                                           multiplier_bcs={'neumann': {1: Constant(0), 2: Constant(0)},
                                                           'dirichlet': {}},
