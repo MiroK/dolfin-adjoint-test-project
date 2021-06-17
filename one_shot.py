@@ -1,14 +1,10 @@
 import numpy as np
 from dolfin import *
 
-L2_inner = lambda u, v, dx: inner(u, v)*dx
-H10_inner = lambda u, v, dx: inner(grad(u), grad(v))*dx
 
-
-def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha,
-             regularization=H10_inner):
+def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha):
     '''
-    Here we with to solve: min_{u, f} (1/2)*norm(u - data)**2 + alpha/2*inner(f', f')*dx
+    Here we with to solve: min_{u, f} (1/2)*norm(u - data)**2 + alpha/2*inner(f, f)*dx
     subject to
 
         -Delta u = f
@@ -34,8 +30,8 @@ def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha,
     u, f, lm = TrialFunctions(W)
     v, g, dlm = TestFunctions(W)
       
-    a = (inner(u, v)*dP(1)                                                 +inner(grad(v), grad(lm))*dx
-                                         +alpha*H10_inner(f, g, dx) -inner(g, lm)*dx
+    a = (inner(u, v)*dP(1)                                     +inner(grad(v), grad(lm))*dx
+                                         +alpha*inner(f, g)*dx -inner(g, lm)*dx
          +inner(grad(u), grad(dlm))*dx   -inner(f, dlm)*dx)
     # FIXME: there should be neumann terms here somewhere
     L = inner(data, v)*dP(1)
@@ -55,10 +51,10 @@ def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha,
 # --------------------------------------------------------------------
 
 if __name__ == '__main__':
-    from gmsh_mesh import Disk, gmsh_mesh
+    from gmsh_mesh import Disk, gmsh_mesh, RectangleHole
     import sys
     
-    data = np.load('./xyz_example_data.npz')
+    data = np.load('./xyz_example_data_rectangular.npz')
 
     points = np.c_[data['x'], data['y']]
     data_points = data['z'].flatten()
@@ -67,13 +63,22 @@ if __name__ == '__main__':
     outer_r = 1.1*np.max(np.linalg.norm(points-center, 2, axis=1))
     inner_r = 0.9*np.min(np.linalg.norm(points-center, 2, axis=1))
 
+    ll = np.min(points, axis=0) - np.array([0.1, 0.1])
+    ur = np.max(points, axis=0) + np.array([0.1, 0.1])
+
+    perim = 2*(ur[0] - ll[0]) + 2*(ur[1] - ll[1])
+    rectangle = RectangleHole(ll, ur, center=center, radius=inner_r,
+                              sizes={'in_min': perim/400, 'in_max': 0.025,
+                                     'out_min': 2*np.pi*outer_r/200, 'out_max': 0.025})
+    
     disk = Disk(center, in_radius=inner_r, out_radius=outer_r,
                 # NOTE: this is an option to set the mesh size finner
                 # in the inner hole compared to the outer boundary
-                sizes={'in_min': 2*np.pi*inner_r/40, 'in_max': 1,
-                       'out_min': 2*np.pi*outer_r/200, 'out_max': 1})
+                sizes={'in_min': 2*np.pi*inner_r/40, 'in_max': 0.025,
+                       'out_min': 2*np.pi*outer_r/200, 'out_max': 0.025})
+    
     mesh, entity_functions, inside_points = gmsh_mesh(points,
-                                                      bounding_shape=disk,
+                                                      bounding_shape=rectangle,
                                                       argv=sys.argv)
 
     vertex_function = entity_functions[0]
@@ -98,8 +103,7 @@ if __name__ == '__main__':
                                                      'neumann': {2: Constant(0)}},
                                           multiplier_bcs={'neumann': {1: Constant(0), 2: Constant(0)},
                                                           'dirichlet': {}},
-                                          alpha=Constant(1E0),
-                                          regularization=H10_inner)
+                                          alpha=Constant(1E0))
 
     File('data.pvd') << u_data
     File('state.pvd') << state

@@ -5,7 +5,7 @@ import gmsh
 
 
 class Shape:
-    TOL = 1E-1
+    TOL = 1E-3
     
     def is_inside(self, points):
         '''Indices of inside points'''
@@ -30,7 +30,7 @@ class Circle(Shape):
         return 'Circle'
 
     def is_inside(self, points):
-        return self.filter(np.linalg.norm(points-self.center, 2, axis=1)**2 < self.radius**2-self.TOL)
+        return self.filter(np.linalg.norm(points-self.center, 2, axis=1)**2 < (self.radius-self.TOL)**2)
 
     def insert_gmsh(self, model, factory):
         cx, cy = self.center
@@ -64,8 +64,10 @@ class Disk(Shape):
         return 'Disk'
 
     def is_inside(self, points):
-        return self.filter(np.logical_and(np.linalg.norm(points-self.center, 2, axis=1)**2 < self.out_radius**2-self.TOL,
-                                          np.linalg.norm(points-self.center, 2, axis=1)**2 > self.in_radius**2+self.TOL))
+        return self.filter(np.logical_and(
+            np.linalg.norm(points-self.center, 2, axis=1)**2 > (self.in_radius+self.TOL)**2,
+            np.linalg.norm(points-self.center, 2, axis=1)**2 < (self.out_radius-self.TOL)**2)
+        )
 
     def insert_gmsh(self, model, factory):
         cx, cy = self.center
@@ -163,7 +165,7 @@ class Rectangle(Shape):
 
 class RectangleHole(Shape):
     '''Rectangle with circle hole enclosing points'''
-    def __init__(self, ll, ur, center, radius):
+    def __init__(self, ll, ur, center, radius, sizes=None):
         assert np.all((ur - ll) > 0)
         assert all(np.all(np.logical_and(ll < center + radius*shift, center + radius*shift < ur))
                    for shift in np.array([[1, 0],
@@ -174,6 +176,7 @@ class RectangleHole(Shape):
         self.ur = ur
         self.center = center
         self.radius = radius
+        self.sizes = sizes
 
     def __repr__(self):
         return 'Rectangle'
@@ -184,7 +187,7 @@ class RectangleHole(Shape):
             # Inside square
             np.logical_and(np.logical_and(x > self.ll[0]+self.TOL, x < self.ur[0]-self.TOL),
                            np.logical_and(y > self.ll[1]+self.TOL, y < self.ur[1]-self.TOL)),
-            np.linalg.norm(points - self.center, 2, axis=1)**2 > self.radius**2+self.TOL
+            np.linalg.norm(points - self.center, 2, axis=1)**2 > (self.radius+self.TOL)**2
         ))
     
     def insert_gmsh(self, model, factory):
@@ -217,6 +220,37 @@ class RectangleHole(Shape):
         # This is square
         for tag, curve in enumerate(sq_lines, 2):
             model.addPhysicalGroup(1, [curve], tag)
+
+        if self.sizes is not None:
+            sizes = self.sizes
+            dr = max(self.ur - self.ll)
+            
+            fields = []
+            idx = 0
+            for prefix, curves in zip(('in_', 'out_'), ([circle_bdry], sq_lines)):
+                idx += 1                
+                model.mesh.field.add('Distance', idx)
+                model.mesh.field.setNumbers(idx, 'CurvesList', curves)
+                model.mesh.field.setNumber(idx, 'NumPointsPerCurve', 100)
+
+                idx += 1
+                model.mesh.field.add('Threshold', idx)
+                model.mesh.field.setNumber(idx, 'InField', idx-1)        
+                model.mesh.field.setNumber(idx, 'SizeMax', sizes[f'{prefix}max'])
+                model.mesh.field.setNumber(idx, 'SizeMin', sizes[f'{prefix}min'])
+                model.mesh.field.setNumber(idx, 'DistMin', 0.1*dr)
+                model.mesh.field.setNumber(idx, 'DistMax', 0.2*dr)
+
+                fields.append(idx)
+
+            idx += 1                
+            model.mesh.field.add('Min', idx)
+            model.mesh.field.setNumbers(idx, 'FieldsList', fields)
+            model.mesh.field.setAsBackgroundMesh(idx)
+
+            gmsh.model.occ.synchronize()
+            gmsh.model.geo.synchronize()    
+            
 
         return shape
 
@@ -251,8 +285,8 @@ def gmsh_mesh(embed_points, bounding_shape, argv=[]):
     factory.synchronize()
 
     # NOTE: if you want to see it first
-    # gmsh.fltk.initialize()
-    # gmsh.fltk.run()
+    gmsh.fltk.initialize()
+    gmsh.fltk.run()
         
     nodes, topologies = msh_gmsh_model(model,
                                        2)
