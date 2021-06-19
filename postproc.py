@@ -16,6 +16,17 @@ def plot_scalar(f, ax, **kwargs):
     return mappable, ax
 
 
+def draw_mesh(f, ax, **kwargs):
+    '''Of f'''
+    mesh = f.function_space().mesh()
+    x, y = mesh.coordinates().T
+    triangulation = tri.Triangulation(x, y, mesh.cells())
+
+    obj = ax.triplot(triangulation, **kwargs)
+
+    return obj, ax
+
+
 def draw_contours(f, ax, **kwargs):
     '''Contour lines'''
     mesh = f.function_space().mesh()
@@ -29,7 +40,7 @@ def draw_contours(f, ax, **kwargs):
     return mappable, ax
 
 
-def add_sampling_points(f, points, ax, s, **kwargs):
+def draw_sampling_points(f, points, ax, s, **kwargs):
     '''Measurement points highligted via scatter'''
     values = [f(x) for x in points]
     return ax.scatter(points[:, 0], points[:, 1], c=values, s=s, **kwargs), ax
@@ -58,7 +69,7 @@ if __name__ == '__main__':
 
     # Indicate location of the data points
     points = np.random.rand(10, 2)
-    add_sampling_points(f, points, ax, s=40, edgecolors='black')    
+    draw_sampling_points(f, points, ax, s=40, edgecolors='black')    
 
     ax.set_aspect('equal')
     ax.set_xlim((0, 1))

@@ -69,7 +69,9 @@ if __name__ == '__main__':
     ur = np.max(points, axis=0) + np.array([0.1, 0.1])
 
     perim = 2*(ur[0] - ll[0]) + 2*(ur[1] - ll[1])
-    rectangle = RectangleHole(ll, ur, center=center, radius=inner_r,
+    rectangle = RectangleHole(ll, ur,
+                              center=(center, center-np.array([0.2, 0.2])),
+                              radius=(inner_r, 2*inner_r),
                               sizes={'in_min': perim/400, 'in_max': 0.025,
                                      'out_min': 2*np.pi*outer_r/200, 'out_max': 0.025})
     
@@ -101,14 +103,16 @@ if __name__ == '__main__':
 
     # Let's solve it
     state, control, multiplier = one_shot(u_data, entity_functions,
-                                          state_bcs={'dirichlet': {1: Constant(1)},  # 1 is inner
-                                                     'neumann': {2: Constant(0)}},
-                                          multiplier_bcs={'neumann': {1: Constant(0)},
-                                                          'dirichlet': {2: Constant(1)}},
+                                          state_bcs={'dirichlet': {1: Constant(0),
+                                                                   2: Constant(2)},  # 1 is inner
+                                                     'neumann': {}},
+                                          multiplier_bcs={'neumann': {},
+                                                          'dirichlet': {1: Constant(0),
+                                                                        2: Constant(0)}},
                                           alpha=Constant(1E0))
 
     # Simple matplotlib visualization
-    f = control
+    f = state
     cmap = plt.get_cmap('summer')
     
     vmin, vmax = extrema(f)
@@ -116,13 +120,16 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots()
     # Basic background
-    mappable, ax = plot_scalar(f, ax, shading='gouraud', cmap=cmap)
+    mappable, ax = plot_scalar(f, ax, shading='gouraud', cmap=cmap, edgecolors='black')
+    #
+    _, ax = draw_mesh(f, ax, color='0.8', linewidth=0.1)
+    
     # Contours for camparison
     countours, ax = draw_contours(f, ax=ax, levels=levels, colors='black')
     ax.clabel(countours, inline=1, fontsize=10)
 
     # Indicate location of the data points
-    add_sampling_points(f, points, ax, s=20, edgecolors='cyan', cmap=cmap)
+    draw_sampling_points(f, points[inside_points], ax, s=20, edgecolors='cyan', cmap=cmap)
 
     ax.set_aspect('equal')
 
