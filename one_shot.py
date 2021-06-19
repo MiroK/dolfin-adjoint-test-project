@@ -52,6 +52,8 @@ def one_shot(data, marking_functions, state_bcs, multiplier_bcs, alpha):
 
 if __name__ == '__main__':
     from gmsh_mesh import Disk, gmsh_mesh, RectangleHole
+    import matplotlib.pyplot as plt
+    from postproc import *
     import sys
     
     data = np.load('./xyz_example_data_rectangular.npz')
@@ -101,10 +103,38 @@ if __name__ == '__main__':
     state, control, multiplier = one_shot(u_data, entity_functions,
                                           state_bcs={'dirichlet': {1: Constant(1)},  # 1 is inner
                                                      'neumann': {2: Constant(0)}},
-                                          multiplier_bcs={'neumann': {1: Constant(0), 2: Constant(0)},
-                                                          'dirichlet': {}},
+                                          multiplier_bcs={'neumann': {1: Constant(0)},
+                                                          'dirichlet': {2: Constant(1)}},
                                           alpha=Constant(1E0))
 
+    # Simple matplotlib visualization
+    f = control
+    cmap = plt.get_cmap('summer')
+    
+    vmin, vmax = extrema(f)
+    levels = np.linspace(vmin, vmax, 5)
+
+    fig, ax = plt.subplots()
+    # Basic background
+    mappable, ax = plot_scalar(f, ax, shading='gouraud', cmap=cmap)
+    # Contours for camparison
+    countours, ax = draw_contours(f, ax=ax, levels=levels, colors='black')
+    ax.clabel(countours, inline=1, fontsize=10)
+
+    # Indicate location of the data points
+    add_sampling_points(f, points, ax, s=20, edgecolors='cyan', cmap=cmap)
+
+    ax.set_aspect('equal')
+
+    xmin, ymin = mesh.coordinates().min(axis=0)
+    xmax, ymax = mesh.coordinates().max(axis=0)    
+    ax.set_xlim((xmin, xmax))
+    ax.set_ylim((ymin, ymax))
+    fig.colorbar(mappable)
+
+    plt.show()
+
+    # Dumpg
     File('data.pvd') << u_data
     File('state.pvd') << state
     File('control.pvd') << control
